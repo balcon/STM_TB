@@ -102,7 +102,7 @@ INTERRUPT_HANDLER(ECHO_IRQ_NAME, ECHO_IRQ_NUM)
   if(distance<ACTIVE_DISTANCE) distanceCntr--;
     else distanceCntr=10;
     if(!distanceCntr){
-      if(!delay) delay=OPEN_TIME; //TODO
+      if(!delay) delay=OPEN_TIME; //TODO buttons
       if(delay<OPEN_TIME-CAP_MASS_TIME) delay=OPEN_TIME-CAP_MASS_TIME;
     }
 }
