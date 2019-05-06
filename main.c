@@ -43,8 +43,8 @@
 #define LED_PORT GPIOB
 #define LED_PIN GPIO_PIN_5
 
-#define OPEN_TIME 300
-#define ACTIVE_DISTANCE 25
+#define OPEN_TIME 400
+#define ACTIVE_DISTANCE 30
 #define CAP_MASS_TIME 50
 
 unsigned int distance=0;
@@ -92,8 +92,6 @@ void moveServo(){
 }
 
 void main() {
-  
-  //CLK_SYSCLKConfig(CLK_PRESCALER_HSIDIV1);
   gpioInit();
   tim1Init();
   tim2Init();
