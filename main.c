@@ -81,12 +81,12 @@ void interruptConfig(){
 
 void moveServo(){
   if(delay>(OPEN_TIME-CAP_MASS_TIME)){
-    TIM2_SetCompare3(500);
+    TIM2_SetCompare3(500); //opened cap position
     GPIO_WriteHigh(SERVO_PORT,SERVO_PIN);
   }else 
         if(delay>50) GPIO_WriteLow(SERVO_PORT,SERVO_PIN);
         else{
-          TIM2_SetCompare3((50-delay)*20+700);
+          TIM2_SetCompare3((50-delay)*20+700); //closed cap position
           GPIO_WriteHigh(SERVO_PORT,SERVO_PIN);
         }
 }
@@ -99,7 +99,9 @@ void main() {
   tim2Init();
   interruptConfig();
   while (1) {
-    
+    if(!GPIO_ReadInputPin(SW_DOWN_PORT,SW_DOWN_PIN))
+       if(!delay) delay=OPEN_TIME;
+       else if(delay<=OPEN_TIME-CAP_MASS_TIME) delay=OPEN_TIME-CAP_MASS_TIME;
   } 
 }
 
@@ -109,11 +111,11 @@ INTERRUPT_HANDLER(ECHO_IRQ_NAME, ECHO_IRQ_NUM)
   unsigned int newDistance=0;
   newDistance=(TIM1_GetCounter()-550)/58;
   if(newDistance>11) distance=newDistance; 
-  if(distance<ACTIVE_DISTANCE) distanceCntr--;
+  if(distance<ACTIVE_DISTANCE) distanceCntr=!distanceCntr?0:distanceCntr-1;
     else distanceCntr=5;
-    if(!distanceCntr&&GPIO_ReadInputPin(SW_UP_PORT,SW_UP_PIN)){
+    if(!distanceCntr && GPIO_ReadInputPin(SW_UP_PORT,SW_UP_PIN)){
       if(!delay) delay=OPEN_TIME;
-      if(delay<OPEN_TIME-CAP_MASS_TIME) delay=OPEN_TIME-CAP_MASS_TIME;
+      else if(delay<OPEN_TIME-CAP_MASS_TIME) delay=OPEN_TIME-CAP_MASS_TIME;
     }
 }
 
