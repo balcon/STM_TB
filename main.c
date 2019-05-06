@@ -15,6 +15,11 @@
       DRAIN - SERVO GND
       SOURCE - GND
       GATE - [D3]
+
+    SWITCH
+      UP POSITION - [C6]
+      DOWN POSITION - [C7]
+      MIDDLE - GND
   ******************
 */
 
@@ -106,8 +111,8 @@ INTERRUPT_HANDLER(ECHO_IRQ_NAME, ECHO_IRQ_NUM)
   if(newDistance>11) distance=newDistance; 
   if(distance<ACTIVE_DISTANCE) distanceCntr--;
     else distanceCntr=5;
-    if(!distanceCntr){
-      if(!delay) delay=OPEN_TIME; //TODO buttons
+    if(!distanceCntr&&GPIO_ReadInputPin(SW_UP_PORT,SW_UP_PIN)){
+      if(!delay) delay=OPEN_TIME;
       if(delay<OPEN_TIME-CAP_MASS_TIME) delay=OPEN_TIME-CAP_MASS_TIME;
     }
 }
