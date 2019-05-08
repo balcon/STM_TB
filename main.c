@@ -43,13 +43,14 @@
 #define LED_PORT GPIOB
 #define LED_PIN GPIO_PIN_5
 
-#define OPEN_TIME 400
-#define ACTIVE_DISTANCE 30
-#define CAP_MASS_TIME 50
+#define OPEN_TIME 300
+#define ACTIVE_DISTANCE 55
+#define CAP_MASS_TIME 40
 
-unsigned int distance=0;
-unsigned int delay=0;
-unsigned int initDelay=3000; //60sec delay for start LED
+int distance=0;
+int delay=0;
+int initDelay=3000; //60sec delay for start LED
+char servoIsActive=0;
 
 void tim1Init(){ //TIM1 generate PWM with 10uS pulse per 60mS for HC-SR06 trigger
   TIM1_TimeBaseInit(1,TIM1_COUNTERMODE_UP,60000,0);
@@ -60,7 +61,7 @@ void tim1Init(){ //TIM1 generate PWM with 10uS pulse per 60mS for HC-SR06 trigge
 
 void tim2Init(){ //TIM2 generate PWM 50Hz for servo
   TIM2_TimeBaseInit(TIM2_PRESCALER_2,20000);
-  TIM2_OC3Init(TIM2_OCMODE_PWM1, TIM2_OUTPUTSTATE_ENABLE,1500, TIM2_OCPOLARITY_HIGH); //500-2000
+  TIM2_OC3Init(TIM2_OCMODE_PWM1, TIM2_OUTPUTSTATE_ENABLE,900, TIM2_OCPOLARITY_HIGH); //500-2000
   TIM2_ITConfig(TIM2_IT_UPDATE,ENABLE);
   TIM2_OC3PreloadConfig(ENABLE);
   TIM2_Cmd(ENABLE);
@@ -79,15 +80,25 @@ void interruptConfig(){
   __enable_interrupt();
 }
 
+void servoOn(){
+  GPIO_WriteHigh(SERVO_PORT,SERVO_PIN);
+  servoIsActive=1;
+}
+
+void servoOff(){
+  GPIO_WriteLow(SERVO_PORT,SERVO_PIN);
+  servoIsActive=0;
+}
+
 void moveServo(){
   if(delay>(OPEN_TIME-CAP_MASS_TIME)){
-    TIM2_SetCompare3(500); //opened cap position
-    GPIO_WriteHigh(SERVO_PORT,SERVO_PIN);
+    TIM2_SetCompare3(1900); //opened cap position
+    servoOn();
   }else 
-        if(delay>50) GPIO_WriteLow(SERVO_PORT,SERVO_PIN);
+        if(delay>50) servoOff();
         else{
-          TIM2_SetCompare3((50-delay)*20+700); //closed cap position
-          GPIO_WriteHigh(SERVO_PORT,SERVO_PIN);
+          TIM2_SetCompare3(delay*10+900); //closed cap position
+          servoOn();
         }
 }
 
@@ -96,25 +107,27 @@ void main() {
   tim1Init();
   tim2Init();
   interruptConfig();
+  
   while (1) {
     if(!GPIO_ReadInputPin(SW_DOWN_PORT,SW_DOWN_PIN))
        if(!delay) delay=OPEN_TIME;
        else if(delay<=OPEN_TIME-CAP_MASS_TIME) delay=OPEN_TIME-CAP_MASS_TIME;
+       
   } 
 }
 
-char distanceCntr=5;
+char distanceCntr=4;
 INTERRUPT_HANDLER(ECHO_IRQ_NAME, ECHO_IRQ_NUM)
 {
-  unsigned int newDistance=0;
-  newDistance=(TIM1_GetCounter()-550)/58;
-  if(newDistance>11) distance=newDistance; 
-  if(distance<ACTIVE_DISTANCE) distanceCntr=!distanceCntr?0:distanceCntr-1;
-    else distanceCntr=5;
-    if(!distanceCntr && GPIO_ReadInputPin(SW_UP_PORT,SW_UP_PIN)){
-      if(!delay) delay=OPEN_TIME;
-      else if(delay<OPEN_TIME-CAP_MASS_TIME) delay=OPEN_TIME-CAP_MASS_TIME;
-    }
+    int newDistance=0;
+    distance=(TIM1_GetCounter()-550)/58;
+    //if(newDistance>11) distance=newDistance; 
+    if(!servoIsActive&&distance<ACTIVE_DISTANCE) distanceCntr=!distanceCntr?0:distanceCntr-1;
+      else distanceCntr=4;
+      if(!distanceCntr && GPIO_ReadInputPin(SW_UP_PORT,SW_UP_PIN)){
+        if(!delay) delay=OPEN_TIME;
+        else if(delay<OPEN_TIME-CAP_MASS_TIME) delay=OPEN_TIME-CAP_MASS_TIME;
+      }
 }
 
 INTERRUPT_HANDLER(TIM2_UPD_OVF_BRK_IRQHandler, 13){
@@ -123,8 +136,6 @@ INTERRUPT_HANDLER(TIM2_UPD_OVF_BRK_IRQHandler, 13){
   if(delay){
     moveServo();
     delay--;
-  } else{
-    GPIO_WriteLow(SERVO_PORT,SERVO_PIN);
-  }
+  }else servoOff();
   TIM2_ClearITPendingBit(TIM2_FLAG_UPDATE);
 }
