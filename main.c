@@ -43,9 +43,9 @@
 #define LED_PORT GPIOB
 #define LED_PIN GPIO_PIN_5
 
-#define OPEN_TIME 300
+#define OPEN_TIME 350
 #define ACTIVE_DISTANCE 55
-#define CAP_MASS_TIME 50
+#define CAP_MASS_TIME 30
 
 int distance=0;
 int delay=0;
@@ -92,12 +92,12 @@ void servoOff(){
 
 void moveServo(){
   if(delay>(OPEN_TIME-CAP_MASS_TIME)){
-    TIM2_SetCompare3(1900); //opened cap position
+    TIM2_SetCompare3(1700); //opened cap position
     servoOn();
   }else 
-        if(delay>90) servoOff();
+        if(delay>150) servoOff();
         else{
-          TIM2_SetCompare3(delay*8+900); //closed cap position
+          TIM2_SetCompare3(delay*5+900); //closed cap position
           servoOn();
         }
 }
@@ -116,14 +116,14 @@ void main() {
   } 
 }
 
-char distanceCntr=4;
+char distanceCntr=3;
 INTERRUPT_HANDLER(ECHO_IRQ_NAME, ECHO_IRQ_NUM)
 {
     int newDistance=0;
     distance=(TIM1_GetCounter()-550)/58;
     //if(newDistance>11) distance=newDistance; 
     if(!servoIsActive&&distance<ACTIVE_DISTANCE) distanceCntr=!distanceCntr?0:distanceCntr-1;
-      else distanceCntr=4;
+      else distanceCntr=3;
       if(!distanceCntr && GPIO_ReadInputPin(SW_UP_PORT,SW_UP_PIN)){
         if(!delay) delay=OPEN_TIME;
         else if(delay<OPEN_TIME-CAP_MASS_TIME) delay=OPEN_TIME-CAP_MASS_TIME;
