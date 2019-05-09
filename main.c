@@ -45,7 +45,7 @@
 
 #define OPEN_TIME 300
 #define ACTIVE_DISTANCE 55
-#define CAP_MASS_TIME 40
+#define CAP_MASS_TIME 50
 
 int distance=0;
 int delay=0;
@@ -95,9 +95,9 @@ void moveServo(){
     TIM2_SetCompare3(1900); //opened cap position
     servoOn();
   }else 
-        if(delay>50) servoOff();
+        if(delay>90) servoOff();
         else{
-          TIM2_SetCompare3(delay*10+900); //closed cap position
+          TIM2_SetCompare3(delay*8+900); //closed cap position
           servoOn();
         }
 }
