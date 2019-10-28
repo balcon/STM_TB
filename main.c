@@ -57,13 +57,16 @@
 
 
 #define OPEN_TIME 350
-#define ACTIVE_DISTANCE 50
+#define ACTIVE_DISTANCE 45
 #define CAP_MASS_TIME 50
+#define ACT_DIS_CNTR 2
 
+int servoIsActive=0;
 int distance=0;
 int delay=0;
 int initDelay=3000; //60sec delay for start INIT_LED
-char servoIsActive=0;
+int initBlinking=250; //5sec delay for init blinking
+ int swcounter=0;
 
 void tim1Init(){ //TIM1 generate PWM with 10uS pulse per 60mS for HC-SR06 trigger
   TIM1_TimeBaseInit(15,TIM1_COUNTERMODE_UP,60000,0);
@@ -87,7 +90,7 @@ void gpioInit(){
   GPIO_Init(SW_DOWN_PORT,SW_DOWN_PIN,GPIO_MODE_IN_PU_NO_IT);
   GPIO_Init(INIT_LED_PORT,INIT_LED_PIN,GPIO_MODE_OUT_PP_LOW_SLOW);
   GPIO_Init(R_LED_PORT,R_LED_PIN,GPIO_MODE_OUT_PP_LOW_SLOW);
-  GPIO_Init(G_LED_PORT,G_LED_PIN,GPIO_MODE_OUT_PP_LOW_SLOW);
+  GPIO_Init(G_LED_PORT,G_LED_PIN,GPIO_MODE_OUT_PP_HIGH_SLOW);
 }
 
 void interruptConfig(){
@@ -125,31 +128,40 @@ void main() {
   interruptConfig();
   
   while (1) {
-    if(!GPIO_ReadInputPin(SW_DOWN_PORT,SW_DOWN_PIN))
-       if(!delay) delay=OPEN_TIME;
-       else if(delay<=OPEN_TIME-CAP_MASS_TIME) delay=OPEN_TIME-CAP_MASS_TIME;
+    if(!servoIsActive && !GPIO_ReadInputPin(SW_DOWN_PORT,SW_DOWN_PIN))
+      if(!delay) delay=OPEN_TIME;
+      else if(delay<=OPEN_TIME-CAP_MASS_TIME) delay=OPEN_TIME-CAP_MASS_TIME;
        
   } 
 }
 
-char distanceCntr=2;
+char distanceCntr=ACT_DIS_CNTR;
 INTERRUPT_HANDLER(ECHO_IRQ_NAME, ECHO_IRQ_NUM)
 {
     distance=(TIM1_GetCounter()-550)/58; 
-    if(!servoIsActive&&distance<ACTIVE_DISTANCE) distanceCntr=!distanceCntr?0:distanceCntr-1;
-      else distanceCntr=2;
-      if(!distanceCntr && GPIO_ReadInputPin(SW_UP_PORT,SW_UP_PIN)){
-        GPIO_WriteHigh(G_LED_PORT,G_LED_PIN);
-        if(!delay) delay=OPEN_TIME;
-        else if(delay<OPEN_TIME-CAP_MASS_TIME) delay=OPEN_TIME-CAP_MASS_TIME;
-      }
-      else 
-        GPIO_WriteLow(G_LED_PORT,G_LED_PIN);
+    if(!servoIsActive && distance<ACTIVE_DISTANCE)
+      distanceCntr=!distanceCntr?0:distanceCntr-1;
+      else distanceCntr=ACT_DIS_CNTR;
+    if(!distanceCntr && GPIO_ReadInputPin(SW_UP_PORT,SW_UP_PIN)){
+      initBlinking=0;
+      GPIO_WriteHigh(G_LED_PORT,G_LED_PIN);
+      if(!delay) delay=OPEN_TIME;
+      else if(delay<OPEN_TIME-CAP_MASS_TIME) delay=OPEN_TIME-CAP_MASS_TIME;
+    }
+    else 
+     if(!initBlinking) GPIO_WriteLow(G_LED_PORT,G_LED_PIN);
 }
 
 INTERRUPT_HANDLER(TIM2_UPD_OVF_BRK_IRQHandler, 13){
   if(initDelay)
     if(!--initDelay) GPIO_WriteHigh(INIT_LED_PORT,INIT_LED_PIN);
+  if(initBlinking){
+    initBlinking--;
+    if(initBlinking%10==0){
+      GPIO_WriteReverse(G_LED_PORT,G_LED_PIN);
+      GPIO_WriteReverse(R_LED_PORT,R_LED_PIN);
+    }
+  }
   if(delay){
     moveServo();
     delay--;
@@ -159,7 +171,7 @@ INTERRUPT_HANDLER(TIM2_UPD_OVF_BRK_IRQHandler, 13){
       GPIO_WriteLow(R_LED_PORT,R_LED_PIN);
   }else{ 
     servoOff();
-    GPIO_WriteLow(R_LED_PORT,R_LED_PIN);
+     if(!initBlinking) GPIO_WriteLow(R_LED_PORT,R_LED_PIN);
   }
   TIM2_ClearITPendingBit(TIM2_FLAG_UPDATE);
 }
