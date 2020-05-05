@@ -66,7 +66,7 @@ int distance=0;
 int delay=0;
 int initDelay=3000; //60sec delay for start INIT_LED
 int initBlinking=250; //5sec delay for init blinking
- int swcounter=0;
+int swcounter=0;
 
 void tim1Init(){ //TIM1 generate PWM with 10uS pulse per 60mS for HC-SR06 trigger
   TIM1_TimeBaseInit(15,TIM1_COUNTERMODE_UP,60000,0);
@@ -110,12 +110,12 @@ void servoOff(){
 
 void moveServo(){
   if(delay>(OPEN_TIME-CAP_MASS_TIME)){
-    TIM2_SetCompare3(1900); //opened cap position
+    TIM2_SetCompare3(2100); //opened cap position
     servoOn();
   }else 
         if(delay>140) servoOff();
         else{
-          TIM2_SetCompare3(delay*7+900); //closed cap position
+          TIM2_SetCompare3(delay*7+1150); //closed cap position
           servoOn();
         }
 }
