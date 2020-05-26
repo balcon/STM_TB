@@ -39,14 +39,10 @@
 #define ECHO_IRQ_NAME EXTI_PORTC_IRQHandler
 #define ECHO_IRQ_NUM 5
 
-#define SERVO_PORT GPIOD
-#define SERVO_PIN GPIO_PIN_3
+#define SERVO GPIOD,GPIO_PIN_3
 
-#define SW_UP_PORT GPIOC
-#define SW_UP_PIN GPIO_PIN_6
-
-#define SW_DOWN_PORT GPIOC
-#define SW_DOWN_PIN GPIO_PIN_7
+#define SW_UP GPIOC,GPIO_PIN_6
+#define SW_DOWN GPIOC,GPIO_PIN_7
 
 #define INIT_LED_PORT GPIOB
 #define INIT_LED_PIN GPIO_PIN_5
@@ -64,30 +60,34 @@
 #define R_LED_PIN GPIO_PIN_6
 
 
-#define OPEN_TIME 350
-#define ACTIVE_DISTANCE 45
-#define CAP_MASS_TIME 50
-#define ACT_DIS_CNTR 2
-#define SERVO_OPEN 2100
-//#define SERVO_CLOSE
+#define OPEN_TIME 350 // open cap time OPEN_TIME*20mS
+#define ACTIVE_DISTANCE 45 // distance for activate in cm
+#define OPENING_TIME 50 // time for turn on servo while cap is moving to opened position
+#define CLOSING_TIME 120 // time for slowly closing cap
+#define ACT_DIS_CNTR 2 // for exception false activate, activation mus be ACT_DIS_CNTR times
+#define SERVO_OPENED 700 // counter for TIM1 PWM
+#define SERVO_CLOSED 2200 // counter for TIM1 PWM
 
-int servoIsActive=0;
-int distance=0; // distanse from HC-SR04 in (centimeters)
-int delay=0; //
-int initBlinking=250; //5sec delay for init blinking
-int swcounter=0;
-short ledDelaySeg=0; // segment of delay for sequentially turning off LEDs
+short servoIsActive=0;
+unsigned short distance=0; // distanse from HC-SR04 in centimeters
+int delay=0; // delay for open cap time
+short openingDelay=0; // delay for turn on servo while cap is moving to opened posotion
+short closingDelta;
+unsigned short initBlinking=250; // delay for init blinking
+short ledFlush=0;
+short ledDelaySeg; // segment of delay for sequentially turning off LEDs
+short distanceCntr=ACT_DIS_CNTR;
 
-void tim1Init(){ //TIM1 generate PWM with 10uS pulse per 60mS for HC-SR06 trigger
+void tim1Init(){ // TIM1 generate PWM with 10uS pulse per 60mS for HC-SR06 trigger
   TIM1_TimeBaseInit(15,TIM1_COUNTERMODE_UP,60000,0);
   TIM1_OC4Init(TIM1_OCMODE_PWM2, TIM1_OUTPUTSTATE_ENABLE, 11, TIM1_OCPOLARITY_LOW, TIM1_OCIDLESTATE_SET);
   TIM1_Cmd(ENABLE);
   TIM1_CtrlPWMOutputs(ENABLE);
 }
 
-void tim2Init(){ //TIM2 generate PWM 50Hz for servo
+void tim2Init(){ // TIM2 generate PWM 50Hz for servo, peruod 20mS
   TIM2_TimeBaseInit(TIM2_PRESCALER_16,20000);
-  TIM2_OC3Init(TIM2_OCMODE_PWM1, TIM2_OUTPUTSTATE_ENABLE,900, TIM2_OCPOLARITY_HIGH); //500-2000
+  TIM2_OC3Init(TIM2_OCMODE_PWM1, TIM2_OUTPUTSTATE_ENABLE,SERVO_CLOSED, TIM2_OCPOLARITY_HIGH); //500-2000
   TIM2_ITConfig(TIM2_IT_UPDATE,ENABLE);
   TIM2_OC3PreloadConfig(ENABLE);
   TIM2_Cmd(ENABLE);
@@ -95,9 +95,9 @@ void tim2Init(){ //TIM2 generate PWM 50Hz for servo
 
 void gpioInit(){
   GPIO_Init(ECHO_PORT,ECHO_PIN,GPIO_MODE_IN_FL_IT);
-  GPIO_Init(SERVO_PORT,SERVO_PIN,GPIO_MODE_OUT_PP_LOW_SLOW);
-  GPIO_Init(SW_UP_PORT,SW_UP_PIN,GPIO_MODE_IN_PU_NO_IT);
-  GPIO_Init(SW_DOWN_PORT,SW_DOWN_PIN,GPIO_MODE_IN_PU_NO_IT);
+  GPIO_Init(SERVO,GPIO_MODE_OUT_PP_LOW_SLOW);
+  GPIO_Init(SW_UP,GPIO_MODE_IN_PU_NO_IT);
+  GPIO_Init(SW_DOWN,GPIO_MODE_IN_PU_NO_IT);
   
   GPIO_Init(LED_G1,GPIO_MODE_OUT_OD_HIZ_SLOW);
   GPIO_Init(LED_G2,GPIO_MODE_OUT_OD_LOW_SLOW);
@@ -115,13 +115,13 @@ void interruptConfig(){
 
 // open servo's MOSFET
 void servoOn(){
-  GPIO_WriteHigh(SERVO_PORT,SERVO_PIN);
+  GPIO_WriteHigh(SERVO);
   servoIsActive=1;
 }
 
 // close servo's MOSFET
 void servoOff(){
-  GPIO_WriteLow(SERVO_PORT,SERVO_PIN);
+  GPIO_WriteLow(SERVO);
   servoIsActive=0;
 }
 
@@ -135,40 +135,55 @@ void ledAllOff(){
     GPIO_WriteHigh(LED_R6);
 }
 
+//turn on all LEDs
+void ledAllOn(){
+    GPIO_WriteLow(LED_G1);
+    GPIO_WriteLow(LED_G2);
+    GPIO_WriteLow(LED_Y3);
+    GPIO_WriteLow(LED_Y4);
+    GPIO_WriteLow(LED_R5);
+    GPIO_WriteLow(LED_R6);
+}
 void moveServo(){
-    if(delay>(OPEN_TIME-CAP_MASS_TIME)){ //time for opening cap
-        TIM2_SetCompare3(2100); //opened cap position
+    if(openingDelay){ //time for opening cap
+        TIM2_SetCompare3(SERVO_OPENED); //opened cap position
         servoOn();
+        openingDelay--;
     }else{ 
-        if(delay>140) servoOff();
+        if(delay>CLOSING_TIME) servoOff();
         else{
-          TIM2_SetCompare3(delay*7+1150); //closed cap position
+          TIM2_SetCompare3(SERVO_CLOSED-delay*closingDelta);
           servoOn();
         }
     }
 }
 
-char distanceCntr=ACT_DIS_CNTR;
 INTERRUPT_HANDLER(ECHO_IRQ_NAME, ECHO_IRQ_NUM)
 {
-    distance=(TIM1_GetCounter()-550)/58; 
-    if(!servoIsActive && distance<ACTIVE_DISTANCE)
-      distanceCntr=!distanceCntr?0:distanceCntr-1;
-      else distanceCntr=ACT_DIS_CNTR;
-    if(!distanceCntr && GPIO_ReadInputPin(SW_UP_PORT,SW_UP_PIN)){
-      initBlinking=0;
-   //   GPIO_WriteHigh(G_LED_PORT,G_LED_PIN);
-      if(!delay) delay=OPEN_TIME;
-      else if(delay<OPEN_TIME-CAP_MASS_TIME) delay=OPEN_TIME-CAP_MASS_TIME;
+    distance=(TIM1_GetCounter()-550)/58; // get distance in cm from TIM1 counter 
+   
+    if(!servoIsActive && distance<ACTIVE_DISTANCE) // get distance when servo turned off
+        distanceCntr=!distanceCntr?0:distanceCntr-1;
+    else
+        distanceCntr=ACT_DIS_CNTR;
+    
+    if(!distanceCntr && GPIO_ReadInputPin(SW_UP)){ // legal activation
+        initBlinking=0;
+        if(!delay) openingDelay=OPENING_TIME;
+        delay=OPEN_TIME;
     }
-  //  else 
-   //  if(!initBlinking) GPIO_WriteLow(G_LED_PORT,G_LED_PIN);
+    if(!GPIO_ReadInputPin(SW_UP))
+        if(!distanceCntr){
+            GPIO_WriteLow(LED_R5);
+            GPIO_WriteLow(LED_R6);
+        }else if(!initBlinking){
+            GPIO_WriteHigh(LED_R5);
+            GPIO_WriteHigh(LED_R6);
+        }
 }
 
 INTERRUPT_HANDLER(TIM2_UPD_OVF_BRK_IRQHandler, 13){
-
-  /*  if(initBlinking){
-        initBlinking--;
+    if(initBlinking){
         if(initBlinking%10==0){
             GPIO_WriteReverse(LED_G1);
             GPIO_WriteReverse(LED_G2);
@@ -177,9 +192,9 @@ INTERRUPT_HANDLER(TIM2_UPD_OVF_BRK_IRQHandler, 13){
             GPIO_WriteReverse(LED_R5);
             GPIO_WriteReverse(LED_R6);
         }
-       // if(!initBlinking) ledAllOff();
-    }*/
-    if(delay){
+        initBlinking--;
+    }
+    if(delay){ // cap open or opening or closing
         if(delay==OPEN_TIME) GPIO_WriteLow(LED_R6);
         if(delay==OPEN_TIME-1) GPIO_WriteLow(LED_R5);
         if(delay==OPEN_TIME-2) GPIO_WriteLow(LED_Y4);
@@ -195,14 +210,9 @@ INTERRUPT_HANDLER(TIM2_UPD_OVF_BRK_IRQHandler, 13){
         if(delay==OPEN_TIME-ledDelaySeg*6) GPIO_WriteHigh(LED_R6);
         moveServo();
         delay--;
-  //  if(delay<220){
-  //    if(delay%10==0) GPIO_WriteReverse(R_LED_PORT,R_LED_PIN);
-  //  }//else   
-     // GPIO_WriteLow(R_LED_PORT,R_LED_PIN);
-    }else{ 
+    }else{ //cap closed
         servoOff();
-        ledAllOff();
-   //  if(!initBlinking) GPIO_WriteLow(R_LED_PORT,R_LED_PIN);
+        if(!initBlinking) ledAllOff();
     }
     TIM2_ClearITPendingBit(TIM2_FLAG_UPDATE);
 }
@@ -212,15 +222,15 @@ void main() {
     gpioInit();
     tim1Init();
     tim2Init();
-    interruptConfig();
-  
-    ledDelaySeg=OPEN_TIME/6;
-  
+    interruptConfig(); 
+    ledDelaySeg=(OPEN_TIME-CLOSING_TIME)/6;
+    closingDelta=(SERVO_CLOSED-SERVO_OPENED+100)/CLOSING_TIME; // 100 for firs long move
     while (1) {
-        if(!servoIsActive && !GPIO_ReadInputPin(SW_DOWN_PORT,SW_DOWN_PIN))
-            if(!delay) delay=OPEN_TIME;
-        else
-            if(delay<=OPEN_TIME-CAP_MASS_TIME) delay=OPEN_TIME-CAP_MASS_TIME;
+      if(!servoIsActive && !GPIO_ReadInputPin(SW_DOWN)){
+            if(!delay) openingDelay=OPENING_TIME;
+            delay=OPEN_TIME;
+            ledAllOn();
+      }
        
   } 
 }
